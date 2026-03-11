@@ -79,16 +79,15 @@ async def load_stock_list():
 async def preheat_hot_stocks():
     global hot_stocks_cache, hot_stocks_date
     try:
-        import akshare as ak
-        df = ak.stock_zh_a_spot_em()
-        df = df.sort_values('涨跌幅', ascending=False).head(5)
+        url  = "http://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page=1&num=5&sort=changepercent&asc=0&node=hs_a&symbol=&_s_r_a=page"
+        r    = requests.get(url, timeout=10)
+        data = r.json()
         results = []
-        for _, row in df.iterrows():
-            code = str(row.get('代码', '')).zfill(6)
-            name = str(row.get('名称', '')).strip()
+        for item in data:
+            code   = item['code'].zfill(6)
+            name   = item['name']
             suffix = '.SH' if code.startswith('6') or code.startswith('9') else '.SZ'
-            if code and name:
-                results.append({'ts_code': code + suffix, 'name': name})
+            results.append({'ts_code': code + suffix, 'name': name})
         hot_stocks_cache = results
         hot_stocks_date  = datetime.date.today().isoformat()
         print(f"✅ 热门股票预热完成，共 {len(results)} 只")
@@ -135,16 +134,15 @@ async def get_hot_stocks():
         return {"results": hot_stocks_cache}
 
     try:
-        import akshare as ak
-        df = ak.stock_zh_a_spot_em()
-        df = df.sort_values('涨跌幅', ascending=False).head(5)
+        url  = "http://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page=1&num=5&sort=changepercent&asc=0&node=hs_a&symbol=&_s_r_a=page"
+        r    = requests.get(url, timeout=10)
+        data = r.json()
         results = []
-        for _, row in df.iterrows():
-            code = str(row.get('代码', '')).zfill(6)
-            name = str(row.get('名称', '')).strip()
+        for item in data:
+            code   = item['code'].zfill(6)
+            name   = item['name']
             suffix = '.SH' if code.startswith('6') or code.startswith('9') else '.SZ'
-            if code and name:
-                results.append({'ts_code': code + suffix, 'name': name})
+            results.append({'ts_code': code + suffix, 'name': name})
         hot_stocks_cache = results
         hot_stocks_date  = today
         return {"results": results}
@@ -211,18 +209,24 @@ async def analyze_stock(req: StockRequest, request: Request):
     result = call_kimi(req.stock_name, req.ts_code, news_text)
     result.remaining = remaining_count(ip)
 
-    # 获取实时价格
+    # 获取实时价格（新浪行情接口，Railway可访问）
     try:
-        import akshare as ak
-        symbol = req.ts_code.replace('.SH', '').replace('.SZ', '')
-        df = ak.stock_bid_ask_em(symbol=symbol)
-        if df is not None and not df.empty:
-            price_row = df[df['item'] == '最新']
-            chg_row = df[df['item'] == '涨幅']
-            if not price_row.empty:
-                result.price = float(price_row.iloc[0]['value'])
-            if not chg_row.empty:
-                result.change_pct = float(chg_row.iloc[0]['value'])
+        prefix  = 'sh' if req.ts_code.endswith('.SH') else 'sz'
+        code    = req.ts_code.replace('.SH', '').replace('.SZ', '')
+        url     = f"http://hq.sinajs.cn/list={prefix}{code}"
+        r       = requests.get(url, headers={"Referer": "http://finance.sina.com.cn"}, timeout=5)
+        r.encoding = 'gbk'
+        content = r.text
+        # 格式: var hq_str_sh600519="名称,今开,昨收,当前价,最高,最低,..."
+        parts = content.split('"')
+        if len(parts) >= 2 and parts[1]:
+            fields = parts[1].split(',')
+            if len(fields) > 3:
+                price      = float(fields[3])
+                yesterday  = float(fields[2])
+                change_pct = round((price - yesterday) / yesterday * 100, 2) if yesterday else 0
+                result.price      = price
+                result.change_pct = change_pct
     except Exception as e:
         print(f"获取价格失败: {e}")
 
@@ -231,21 +235,24 @@ async def analyze_stock(req: StockRequest, request: Request):
     return result
 
 
-# ── 抓取新闻 ───────────────────────────────────────────
+# ── 抓取新闻（新浪财经，Railway可访问）─────────────────
 def fetch_news(ts_code: str, stock_name: str) -> str:
     news_items = []
     try:
-        import akshare as ak
-        symbol = ts_code.replace('.SH', '').replace('.SZ', '')
-        df = ak.stock_news_em(symbol=symbol)
-        if df is not None and not df.empty:
-            for _, row in df.head(15).iterrows():
-                title   = str(row.get('新闻标题', '')).strip()
-                content = str(row.get('新闻内容', '')).strip()[:100]
-                source  = str(row.get('文章来源', '')).strip()
-                time    = str(row.get('发布时间', '')).strip()
-                if title:
-                    news_items.append(f"【{source} {time[:10]}】{title}。{content}")
+        from bs4 import BeautifulSoup
+        code   = ts_code.replace('.SH', '').replace('.SZ', '')
+        prefix = 'sh' if ts_code.endswith('.SH') else 'sz'
+        url    = f"http://money.finance.sina.com.cn/corp/go.php/vCB_AllNewsStock/symbol/{prefix}{code}.phtml"
+        r = requests.get(url, timeout=10)
+        r.encoding = 'gbk'
+        soup = BeautifulSoup(r.text, 'html.parser')
+        for row in soup.select('table.list_table tr')[:15]:
+            cols = row.select('td')
+            if len(cols) >= 2:
+                title = cols[0].get_text(strip=True)
+                date  = cols[1].get_text(strip=True)
+                if title and len(title) > 5:
+                    news_items.append(f"【{date}】{title}")
     except Exception as e:
         print(f"获取新闻失败: {e}")
 
