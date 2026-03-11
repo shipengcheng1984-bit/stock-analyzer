@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>股票新闻速览</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: #f5f5f5;
+    color: #1a1a1a;
+    min-height: 100vh;
+  }
+
+  header {
+    background: #fff;
+    border-bottom: 2px solid #e53e3e;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .logo { font-size: 20px; font-weight: 700; color: #e53e3e; }
+  .logo span { color: #1a1a1a; }
+  .subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+
+  .remaining-badge {
+    font-size: 12px;
+    color: #888;
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    padding: 5px 12px;
+    border-radius: 20px;
+    display: none;
+  }
+  .remaining-badge.visible { display: block; }
+  .remaining-badge span { color: #e53e3e; font-weight: 700; }
+
+  .container { max-width: 720px; margin: 40px auto; padding: 0 20px; }
+
+  .search-box {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .search-box h2 { font-size: 15px; font-weight: 500; color: #444; margin-bottom: 16px; }
+
+  .search-wrap { position: relative; }
+
+  .search-row {
+    display: flex;
+    border: 1.5px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+    transition: border-color 0.2s;
+  }
+  .search-row:focus-within { border-color: #e53e3e; }
+
+  .search-icon { padding: 0 14px; display: flex; align-items: center; color: #bbb; font-size: 16px; flex-shrink: 0; }
+
+  #search-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    padding: 12px 4px;
+    font-size: 15px;
+    font-family: inherit;
+    background: transparent;
+    min-width: 0;
+  }
+
+  .btn-clear {
+    background: none;
+    border: none;
+    color: #bbb;
+    font-size: 18px;
+    padding: 0 10px;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.15s;
+    display: none;
+    flex-shrink: 0;
+  }
+  .btn-clear:hover { color: #e53e3e; }
+
+  .btn-analyze {
+    background: #e53e3e;
+    color: #fff;
+    border: none;
+    padding: 0 28px;
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+    border-radius: 0 4px 4px 0;
+    flex-shrink: 0;
+  }
+  .btn-analyze:hover { background: #c53030; }
+  .btn-analyze:disabled { background: #ccc; cursor: not-allowed; }
+
+  /* 联想下拉 */
+  .suggestions {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0; right: 0;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    z-index: 100;
+    overflow: hidden;
+    display: none;
+  }
+  .suggestions.visible { display: block; }
+
+  .suggestion-item {
+    display: flex;
+    align-items: center;
+    padding: 11px 16px;
+    cursor: pointer;
+    gap: 12px;
+    border-bottom: 1px solid #f5f5f5;
+    transition: background 0.1s;
+  }
+  .suggestion-item:last-child { border-bottom: none; }
+  .suggestion-item:hover, .suggestion-item.active { background: #fff5f5; }
+
+  .sug-code { font-size: 12px; color: #e53e3e; font-weight: 600; width: 95px; flex-shrink: 0; }
+  .sug-name { font-size: 14px; color: #1a1a1a; flex: 1; }
+  .sug-name em { color: #e53e3e; font-style: normal; font-weight: 600; }
+  .sug-industry { font-size: 11px; color: #aaa; flex-shrink: 0; }
+  .sug-hint { padding: 10px 16px; font-size: 12px; color: #aaa; text-align: center; }
+
+  /* 热门 */
+  .hot-tags { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+  .hot-label { font-size: 12px; color: #aaa; }
+  .hot-tag {
+    font-size: 12px; color: #e53e3e;
+    border: 1px solid #fca5a5;
+    padding: 4px 10px; border-radius: 20px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .hot-tag:hover { background: #e53e3e; color: #fff; border-color: #e53e3e; }
+
+  .history-tags { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+  .history-tag {
+    font-size: 12px; color: #666;
+    border: 1px solid #ddd;
+    padding: 4px 10px; border-radius: 20px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .history-tag:hover { border-color: #e53e3e; color: #e53e3e; }
+
+  /* 结果卡片 */
+  .result-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    display: none;
+  }
+  .result-card.visible {
+    display: block;
+    animation: fadeUp 0.3s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .result-header {
+    padding: 16px 24px; background: #fafafa;
+    border-bottom: 1px solid #eee;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .stock-title { font-size: 18px; font-weight: 700; }
+  .stock-code { font-size: 13px; color: #888; margin-top: 2px; }
+
+  .sentiment-badge { padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 500; }
+  .sentiment-正面 { background: #f0fff4; color: #276749; border: 1px solid #9ae6b4; }
+  .sentiment-负面 { background: #fff5f5; color: #9b2335; border: 1px solid #feb2b2; }
+  .sentiment-中性 { background: #fffaf0; color: #7b6020; border: 1px solid #fbd38d; }
+
+  .result-body { padding: 24px; }
+  .section-title { font-size: 12px; font-weight: 500; color: #888; letter-spacing: 1px; margin-bottom: 10px; }
+
+  .summary-text {
+    font-size: 15px; line-height: 1.8; color: #2d2d2d;
+    margin-bottom: 24px; padding: 14px 16px;
+    background: #fafafa; border-left: 3px solid #e53e3e;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  .key-points { list-style: none; }
+  .key-points li {
+    padding: 10px 0; border-bottom: 1px solid #f0f0f0;
+    font-size: 14px; line-height: 1.6;
+    display: flex; gap: 10px; align-items: flex-start;
+    opacity: 0;
+    animation: fadeUp 0.3s ease both;
+  }
+  .key-points li:last-child { border-bottom: none; }
+  .key-points li:nth-child(1) { animation-delay: 0.1s; }
+  .key-points li:nth-child(2) { animation-delay: 0.2s; }
+  .key-points li:nth-child(3) { animation-delay: 0.3s; }
+  .key-points li:nth-child(4) { animation-delay: 0.4s; }
+  .key-points li:nth-child(5) { animation-delay: 0.5s; }
+
+  .point-num {
+    background: #e53e3e; color: #fff;
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; flex-shrink: 0; margin-top: 2px;
+  }
+
+  .result-footer {
+    padding: 12px 24px; background: #fafafa;
+    border-top: 1px solid #eee;
+    font-size: 12px; color: #aaa;
+    display: flex; justify-content: space-between;
+  }
+
+  /* 加载动画 */
+  .loading { text-align: center; padding: 40px; display: none; }
+  .loading.visible { display: block; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid #f0f0f0; border-top-color: #e53e3e;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 14px; color: #888; transition: opacity 0.3s; }
+
+  .disclaimer {
+    margin-top: 24px; padding: 12px 16px;
+    background: #fffbeb; border: 1px solid #f6e05e;
+    border-radius: 4px; font-size: 12px; color: #744210; line-height: 1.6;
+  }
+
+  .error-msg {
+    padding: 16px; background: #fff5f5;
+    border: 1px solid #feb2b2; border-radius: 4px;
+    color: #9b2335; font-size: 14px;
+    display: none; margin-bottom: 16px;
+  }
+  .error-msg.visible { display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">股票<span>速览</span></div>
+    <div class="subtitle">AI驱动的A股新闻分析工具</div>
+  </div>
+  <div class="remaining-badge" id="remaining-badge">今日剩余 <span id="remaining-count">10</span> 次</div>
+</header>
+
+<div class="container">
+
+  <div class="search-box">
+    <h2>输入股票名称或代码，AI帮你整理最新资讯</h2>
+    <div class="search-wrap">
+      <div class="search-row">
+        <div class="search-icon">🔍</div>
+        <input type="text" id="search-input"
+          placeholder="搜索全部A股，如：茅台 / 600519"
+          autocomplete="off" />
+        <button class="btn-clear" id="btn-clear" onclick="clearInput()">✕</button>
+        <button class="btn-analyze" id="btn-analyze" onclick="analyze()">分析</button>
+      </div>
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+    <div class="hot-tags" id="hot-tags">
+      <span class="hot-label">今日热门：</span>
+      <span class="hot-tag" style="color:#bbb;border-color:#eee;cursor:default">加载中…</span>
+    </div>
+    <div class="history-tags" id="history-tags" style="display:none"></div>
+  </div>
+
+  <div class="error-msg" id="error-msg"></div>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loading-text">正在获取最新资讯…</div>
+  </div>
+
+  <div class="result-card" id="result-card">
+    <div class="result-header">
+      <div>
+        <div class="stock-title" id="res-name">—</div>
+        <div class="stock-code" id="res-code">—</div>
+      </div>
+      <div class="sentiment-badge" id="res-sentiment">—</div>
+    </div>
+    <div class="result-body">
+      <div class="section-title">核心摘要</div>
+      <div class="summary-text" id="res-summary">—</div>
+      <div class="section-title">关键信息点</div>
+      <ul class="key-points" id="res-points"></ul>
+    </div>
+    <div class="result-footer">
+      <span id="res-count">—</span>
+      <span>⚠️ 仅供参考，不构成投资建议</span>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    ⚠️ 本工具仅做新闻信息整理，AI总结内容不代表任何投资建议。股市有风险，投资需谨慎。
+  </div>
+
+</div>
+
+<script>
+const API_BASE = 'http://localhost:8000';
+
+let selectedCode = '';
+let selectedName = '';
+let activeSugIndex = -1;
+let searchTimer = null;
+let loadingTimer = null;
+
+const input    = document.getElementById('search-input');
+const sugBox   = document.getElementById('suggestions');
+const btnClear = document.getElementById('btn-clear');
+
+// ── 清空输入框 ────────────────────────────────────────
+function clearInput() {
+  input.value = '';
+  selectedCode = '';
+  selectedName = '';
+  btnClear.style.display = 'none';
+  hideSug();
+  hideResult();
+  hideError();
+  input.focus();
+}
+
+// ── 输入联想 ──────────────────────────────────────────
+input.addEventListener('input', () => {
+  const q = input.value.trim();
+  selectedCode = '';
+  selectedName = '';
+  activeSugIndex = -1;
+  btnClear.style.display = q ? 'block' : 'none';
+
+  clearTimeout(searchTimer);
+  if (!q) { hideSug(); return; }
+
+  sugBox.innerHTML = `<div class="sug-hint">搜索中…</div>`;
+  sugBox.classList.add('visible');
+  searchTimer = setTimeout(() => doSearch(q), 200);
+});
+
+async function doSearch(q) {
+  try {
+    const res  = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    renderSuggestions(data.results, q);
+  } catch {
+    sugBox.innerHTML = `<div class="sug-hint">搜索失败，请确认后端服务已启动</div>`;
+  }
+}
+
+function renderSuggestions(results, q) {
+  if (!results || results.length === 0) {
+    sugBox.innerHTML = `<div class="sug-hint">未找到"${q}"，换个关键词试试</div>`;
+    sugBox.classList.add('visible');
+    return;
+  }
+  sugBox.innerHTML = results.map((s, i) => `
+    <div class="suggestion-item" data-index="${i}"
+         data-code="${s.ts_code}" data-name="${s.name}"
+         onmousedown="selectStock('${s.ts_code}','${s.name}')">
+      <span class="sug-code">${s.ts_code}</span>
+      <span class="sug-name">${highlight(s.name, q)}</span>
+      <span class="sug-industry">${s.industry || ''}</span>
+    </div>
+  `).join('');
+  sugBox.classList.add('visible');
+}
+
+function highlight(name, q) {
+  try {
+    return name.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), `<em>${q}</em>`);
+  } catch { return name; }
+}
+
+// ── 键盘导航 ─────────────────────────────────────────
+input.addEventListener('keydown', e => {
+  const items = sugBox.querySelectorAll('.suggestion-item');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    activeSugIndex = Math.min(activeSugIndex + 1, items.length - 1);
+    updateActive(items);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    activeSugIndex = Math.max(activeSugIndex - 1, 0);
+    updateActive(items);
+  } else if (e.key === 'Enter') {
+    if (activeSugIndex >= 0 && items[activeSugIndex]) {
+      const el = items[activeSugIndex];
+      selectStock(el.dataset.code, el.dataset.name);
+    } else {
+      analyze();
+    }
+  } else if (e.key === 'Escape') {
+    hideSug();
+  }
+});
+
+function updateActive(items) {
+  items.forEach((el, i) => el.classList.toggle('active', i === activeSugIndex));
+}
+
+input.addEventListener('blur', () => setTimeout(hideSug, 150));
+function hideSug() { sugBox.classList.remove('visible'); }
+
+// ── 选中股票 ─────────────────────────────────────────
+function selectStock(code, name) {
+  selectedCode = code;
+  selectedName = name;
+  input.value  = `${name}　${code}`;
+  btnClear.style.display = 'block';
+  hideSug();
+  analyze();
+}
+
+// ── 动态加载提示 ──────────────────────────────────────
+const loadingMessages = [
+  '正在获取最新资讯…',
+  '正在读取新闻内容…',
+  'AI 正在分析中…',
+  '正在整理关键信息…',
+  '即将完成…'
+];
+
+function setLoading(on) {
+  document.getElementById('loading').classList.toggle('visible', on);
+  document.getElementById('btn-analyze').disabled = on;
+
+  if (on) {
+    let i = 0;
+    document.getElementById('loading-text').textContent = loadingMessages[0];
+    loadingTimer = setInterval(() => {
+      i = Math.min(i + 1, loadingMessages.length - 1);
+      document.getElementById('loading-text').textContent = loadingMessages[i];
+    }, 2000);
+  } else {
+    clearInterval(loadingTimer);
+  }
+}
+
+// ── 分析 ─────────────────────────────────────────────
+async function analyze() {
+  if (!selectedCode) {
+    showError('请从下拉列表中选择股票，或点击热门标签快速选择');
+    return;
+  }
+
+  const code = selectedCode;
+  const name = selectedName;
+
+  setLoading(true);
+  hideError();
+  hideResult();
+
+  try {
+    const res = await fetch(`${API_BASE}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ts_code: code, stock_name: name })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      if (res.status === 429) throw new Error(err.detail);
+      throw new Error(err.detail || '请求失败');
+    }
+
+    showResult(await res.json());
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    setLoading(false);
+    selectedCode = '';
+    selectedName = '';
+  }
+}
+
+// ── 显示结果 ─────────────────────────────────────────
+function showResult(data) {
+  const pctColor = data.change_pct > 0 ? '#e53e3e' : data.change_pct < 0 ? '#38a169' : '#888';
+  const pctSign  = data.change_pct > 0 ? '+' : '';
+  const priceTag = data.price > 0
+    ? `<span style="font-size:14px;font-weight:400;color:#888;margin-left:10px">¥${data.price.toFixed(2)}</span>
+       <span style="font-size:13px;font-weight:600;color:${pctColor};margin-left:6px">${pctSign}${data.change_pct.toFixed(2)}%</span>`
+    : '';
+  document.getElementById('res-name').innerHTML = data.stock_name + priceTag;
+  document.getElementById('res-code').textContent = data.ts_code;
+  document.getElementById('res-summary').textContent = data.summary;
+  document.getElementById('res-count').textContent = `共分析 ${data.news_count} 条资讯`;
+
+  const badge = document.getElementById('res-sentiment');
+  badge.textContent = data.sentiment;
+  badge.className = 'sentiment-badge sentiment-' + data.sentiment;
+
+  document.getElementById('res-points').innerHTML = data.key_points.map((pt, i) => `
+    <li><span class="point-num">${i + 1}</span><span>${pt}</span></li>
+  `).join('');
+
+  // 更新剩余次数
+  const badge2 = document.getElementById('remaining-badge');
+  badge2.classList.add('visible');
+  document.getElementById('remaining-count').textContent = data.remaining;
+
+  document.getElementById('result-card').classList.remove('visible');
+  void document.getElementById('result-card').offsetWidth;
+  document.getElementById('result-card').classList.add('visible');
+  document.getElementById('result-card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  saveHistory(data.ts_code, data.stock_name);
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-msg');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+function hideError()  { document.getElementById('error-msg').classList.remove('visible'); }
+function hideResult() { document.getElementById('result-card').classList.remove('visible'); }
+
+// ── 加载今日热门 ──────────────────────────────────────
+async function loadHotStocks() {
+  try {
+    const res  = await fetch(`${API_BASE}/hot-stocks`);
+    const data = await res.json();
+    const container = document.getElementById('hot-tags');
+    if (!data.results || !data.results.length) return;
+    container.innerHTML = '<span class="hot-label">今日热门：</span>' +
+      data.results.map(s =>
+        `<span class="hot-tag" onclick="selectStock('${s.ts_code}','${s.name}')">${s.name}</span>`
+      ).join('');
+  } catch (e) {
+    console.log('热门股票加载失败', e);
+  }
+}
+
+function saveHistory(code, name) {
+  let history = JSON.parse(sessionStorage.getItem('query_history') || '[]');
+  history = history.filter(h => h.code !== code);
+  history.unshift({ code, name });
+  history = history.slice(0, 5);
+  sessionStorage.setItem('query_history', JSON.stringify(history));
+  renderHistory();
+}
+
+function renderHistory() {
+  let history = JSON.parse(sessionStorage.getItem('query_history') || '[]');
+  const container = document.getElementById('history-tags');
+  if (!history.length) { container.style.display = 'none'; return; }
+  container.style.display = 'flex';
+  container.innerHTML = '<span class="hot-label">最近查询：</span>' +
+    history.map(h =>
+      `<span class="history-tag" onclick="selectStock('${h.code}','${h.name}')">${h.name}</span>`
+    ).join('');
+}
+
+renderHistory();
+loadHotStocks();
+</script>
+</body>
+</html>
